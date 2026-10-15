@@ -1,0 +1,74 @@
+{
+  "checkpoint_sha256": "0a8bd8c7bfd2f8adcf9d310852dea68c297597bdd708362c52e786a8598c496a",
+  "config": {
+    "acquisition_film": false,
+    "attention": true,
+    "augmentation": "cutmix",
+    "batch_size": 8,
+    "candidate_id": "C04",
+    "correction_bound": 3.0,
+    "epochs": 10,
+    "examples_per_epoch": 1024,
+    "learning_rate": 0.00035,
+    "name": "five_slice_cutmix_attention_full",
+    "raw_context": 5,
+    "sampler": "random",
+    "seed": 2026081902,
+    "source_stage_b_id": "A05",
+    "source_stage_b_summary": {
+      "candidate_id": "A05",
+      "family": "synthesized_assembly",
+      "kind": "assembly",
+      "median_boundary_delta": 0.015162741938549884,
+      "median_delta_vs_control_star": 0.008482634571853997,
+      "median_robust_score": 0.0041497884490825695,
+      "median_volumes_improved": 6.0,
+      "median_worst_volume_delta": -0.04332846122771428,
+      "min_seed_delta_vs_control_star": 0.007318848093418484,
+      "minimum_worst_volume_delta": -0.043819395954947105,
+      "n_complete_seeds": 3,
+      "name": "five_slice_cutmix_attention",
+      "rank": 4
+    },
+    "validation_batch_size": 12,
+    "weight_decay": 0.0001,
+    "width": 24
+  },
+  "inputs": {
+    "mitonet_instances_sha256": "6e04367d44734a7b99ae01535fafcd8e2ad8e6d768e6658f2b6ed3d6cb050edd",
+    "mitonet_probability_sha256": "2902d7e82677ada2b099c1e2ee8ec656026c49bb8d2812ac1d751431185325ce",
+    "omniem_probability_sha256": "f01db9c320f0147d62c326401dd724757fa6a6fbc5c72c07ec394ca5cc6ea63f",
+    "raw_sha256": "beafb2c258b8f2ea68868509c83d9f301fa2e2ff72f197dd71e9f1909e441655"
+  },
+  "mean_prior_gate_to_mitonet": 0.7742963525891375,
+  "normalization": {
+    "percentile_high": 165.80999999999995,
+    "percentile_low": 59.19
+  },
+  "outputs": {
+    "instances_sha256": "eb68bde7ddd8cdfc7ae9316c1ebf11cd4040e4240aa789aa64d45178650bda43",
+    "probability_sha256": "b6f75c200c0dcfb4198ede3b0de49474300877de5be76b76a5f3d77a524cbee3",
+    "semantic_sha256": "115b0efd48ee227853829e499e8c04a95766f24c86187f9d648ac4cd9faf2771"
+  },
+  "reconstruction_policy": {
+    "contraction_trigger_ratio": 0.95,
+    "extension_source": "primary_instances",
+    "minimum_native_voxels": 500,
+    "policy_id": "G011",
+    "primary_extension_nm": 24,
+    "zero_primary_maximum_rescue_objects": 4,
+    "zero_primary_minimum_candidate_overlap_fraction": 0.5
+  },
+  "schema_version": "mitocensus.inference-manifest.v1",
+  "shape_zyx": [
+    5,
+    64,
+    64
+  ],
+  "spacing_nm_zyx": [
+    30.0,
+    16.0,
+    16.0
+  ],
+  "threshold": 0.5
+}

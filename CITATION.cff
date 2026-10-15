@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+message: "If you use MitoCensus, please cite it using the metadata below."
+type: software
+title: "MitoCensus"
+abstract: "Object-level quality control and measurement of mitochondria in volume electron microscopy."
+version: 0.3.0
+license: MIT
+repository-code: "https://github.com/Dongyong-Lee/mitocensus"
+url: "https://github.com/Dongyong-Lee/mitocensus"
+authors:
+  - given-names: "Yeseong"
+    family-names: "Kim"
+    affiliation: "Digital Medicine Institute, PURIMEDI Corp."
+  - given-names: "Rosa Jiwon"
+    family-names: "Yoon"
+    affiliation: "Harvard Graduate School of Education, Harvard University"
+  - given-names: "Jaewon"
+    family-names: "Song"
+    affiliation: "Digital Medicine Institute, PURIMEDI Corp."
+  - given-names: "Seokwon"
+    family-names: "Ham"
+    affiliation: "Digital Medicine Institute, PURIMEDI Corp."
+  - given-names: "Ian"
+    family-names: "Kim"
+    affiliation: "Digital Medicine Institute, PURIMEDI Corp."
+  - given-names: "Elyse Sieun"
+    family-names: "Oh"
+    affiliation: "Digital Medicine Institute, PURIMEDI Corp."
+  - given-names: "Erika Eunji"
+    family-names: "Shin"
+    affiliation: "Digital Medicine Institute, PURIMEDI Corp."
+  - given-names: "Robyn Sungmi"
+    family-names: "Lee"
+    affiliation: "Harvard Graduate School of Education, Harvard University"
+  - given-names: "Dongyong"
+    family-names: "Lee"
+    affiliation: "Ulsan National Institute of Science and Technology"
+    orcid: "https://orcid.org/0009-0002-7905-2278"
+keywords:
+  - mitochondria
+  - volume electron microscopy
+  - morphometry
+  - quality control
+  - segmentation
+  - bioimage analysis

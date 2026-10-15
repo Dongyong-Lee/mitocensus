@@ -1,0 +1,87 @@
+{
+  "command": "python scripts/verify_minimal_example.py",
+  "cpu_reference": true,
+  "files": {
+    "expected_output/manifest.json": {
+      "bytes": 2529,
+      "sha256": "69518e163300049a543c7c1f8e033783d376026e68213a729e6ca87ac93dc35c"
+    },
+    "expected_output/refined_instances.tif": {
+      "bytes": 2145,
+      "sha256": "eb68bde7ddd8cdfc7ae9316c1ebf11cd4040e4240aa789aa64d45178650bda43"
+    },
+    "expected_output/refined_probability.tif": {
+      "bytes": 77585,
+      "sha256": "b6f75c200c0dcfb4198ede3b0de49474300877de5be76b76a5f3d77a524cbee3"
+    },
+    "expected_output/refined_semantic.tif": {
+      "bytes": 2013,
+      "sha256": "115b0efd48ee227853829e499e8c04a95766f24c86187f9d648ac4cd9faf2771"
+    },
+    "g011_policy.json": {
+      "bytes": 270,
+      "sha256": "ab09c41664415763a340e7584b6a20b153d6556e64725da596648e9ec016a856"
+    },
+    "input/mitonet_instances.tif": {
+      "bytes": 1567,
+      "sha256": "6e04367d44734a7b99ae01535fafcd8e2ad8e6d768e6658f2b6ed3d6cb050edd"
+    },
+    "input/mitonet_probability.tif": {
+      "bytes": 22506,
+      "sha256": "2902d7e82677ada2b099c1e2ee8ec656026c49bb8d2812ac1d751431185325ce"
+    },
+    "input/omniem_probability.tif": {
+      "bytes": 22392,
+      "sha256": "f01db9c320f0147d62c326401dd724757fa6a6fbc5c72c07ec394ca5cc6ea63f"
+    },
+    "input/raw_em.tif": {
+      "bytes": 13753,
+      "sha256": "beafb2c258b8f2ea68868509c83d9f301fa2e2ff72f197dd71e9f1909e441655"
+    },
+    "refinement_C04.pt": {
+      "bytes": 3052608,
+      "sha256": "0a8bd8c7bfd2f8adcf9d310852dea68c297597bdd708362c52e786a8598c496a"
+    }
+  },
+  "schema_version": "mitocensus.minimal-example.v1",
+  "spacing_nm_zyx": [
+    30.0,
+    16.0,
+    16.0
+  ],
+  "summary": {
+    "instances": {
+      "dtype": "uint16",
+      "foreground_voxels": 2533,
+      "labels": [
+        1,
+        2
+      ],
+      "shape_zyx": [
+        5,
+        64,
+        64
+      ]
+    },
+    "probability": {
+      "dtype": "float32",
+      "maximum": 0.8942242860794067,
+      "mean": 0.13244237005710602,
+      "minimum": 2.0555111404974014e-05,
+      "shape_zyx": [
+        5,
+        64,
+        64
+      ]
+    },
+    "semantic": {
+      "dtype": "uint8",
+      "foreground_voxels": 2533,
+      "shape_zyx": [
+        5,
+        64,
+        64
+      ]
+    }
+  }
+}

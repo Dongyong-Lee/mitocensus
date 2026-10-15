@@ -1,0 +1,9 @@
+{
+  "contraction_trigger_ratio": 0.95,
+  "extension_source": "primary_instances",
+  "minimum_native_voxels": 500,
+  "policy_id": "G011",
+  "primary_extension_nm": 24,
+  "zero_primary_maximum_rescue_objects": 4,
+  "zero_primary_minimum_candidate_overlap_fraction": 0.5
+}

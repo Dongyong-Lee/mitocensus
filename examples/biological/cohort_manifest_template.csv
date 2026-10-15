@@ -1,0 +1,5 @@
+sample_id,group,biological_unit,acquisition_batch,analysis_dir
+control-field-01,control,control-animal-01,batch-01,control-field-01_biology
+control-field-02,control,control-animal-02,batch-01,control-field-02_biology
+treated-field-01,treated,treated-animal-01,batch-01,treated-field-01_biology
+treated-field-02,treated,treated-animal-02,batch-01,treated-field-02_biology

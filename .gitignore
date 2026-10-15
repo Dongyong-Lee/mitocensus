@@ -1,0 +1,19 @@
+# macOS and exFAT metadata
+._*
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Local outputs
+outputs/
+*.log
