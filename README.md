@@ -6,6 +6,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-1F5F99"></a>
   <img alt="Python 3.10 or later" src="https://img.shields.io/badge/python-3.10%2B-1F5F99">
   <img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-57606A">
+  <a href="https://doi.org/10.5281/zenodo.23390544"><img alt="DOI 10.5281/zenodo.23390544" src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23390544-0F766E"></a>
   <a href="CITATION.cff"><img alt="Cite this software" src="https://img.shields.io/badge/cite-CITATION.cff-CC79A7"></a>
 </p>
 
@@ -160,8 +161,10 @@ CellMap acquisitions are not demonstrated independent donors or biological repli
 
 ## Citing MitoCensus
 
-A manuscript describing MitoCensus is in preparation. Until it is published, cite the software with the metadata in
-[CITATION.cff](CITATION.cff); GitHub's **Cite this repository** button gives APA and BibTeX.
+A manuscript describing MitoCensus is in preparation. Until it is published, cite the archived software: version 0.3.0
+is [10.5281/zenodo.23390545](https://doi.org/10.5281/zenodo.23390545), and
+[10.5281/zenodo.23390544](https://doi.org/10.5281/zenodo.23390544) resolves to the latest version.
+[CITATION.cff](CITATION.cff) holds the same metadata; GitHub's **Cite this repository** button gives APA and BibTeX.
 
 ## License
 

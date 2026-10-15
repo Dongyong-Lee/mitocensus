@@ -4,6 +4,15 @@ type: software
 title: "MitoCensus"
 abstract: "Object-level quality control and measurement of mitochondria in volume electron microscopy."
 version: 0.3.0
+date-released: 2026-10-15
+doi: 10.5281/zenodo.23390544
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23390544
+    description: "All versions (concept DOI)"
+  - type: doi
+    value: 10.5281/zenodo.23390545
+    description: "Version 0.3.0"
 license: MIT
 repository-code: "https://github.com/Dongyong-Lee/mitocensus"
 url: "https://github.com/Dongyong-Lee/mitocensus"
