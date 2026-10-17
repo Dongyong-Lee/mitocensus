@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mitocensus"
 version = "0.3.0"
-description = "Object-level quality control and measurement of mitochondria in electron microscopy"
+description = "Object-level quality control for mitochondrial morphometry in volume electron microscopy"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}

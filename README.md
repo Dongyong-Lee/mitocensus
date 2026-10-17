@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/mitocensus_banner.png" alt="MitoCensus: object-level quality control and measurement of mitochondria in volume electron microscopy" width="100%">
+  <img src="docs/images/mitocensus_banner.png" alt="MitoCensus: object-level quality control for mitochondrial morphometry in volume electron microscopy" width="100%">
 </p>
 
 <p align="center">

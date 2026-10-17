@@ -22,7 +22,7 @@ ax = fig.add_axes([0, 0, 1, 1])
 ax.set_xlim(0, W); ax.set_ylim(H, 0); ax.axis("off")
 ax.imshow(img, extent=(0, W, H, 0), interpolation="lanczos")
 ax.text(72, 150, "MitoCensus", fontsize=88, fontweight="bold", color="#FFFFFF", va="baseline")
-ax.text(76, 206, "Object-level quality control and measurement\nof mitochondria in volume electron microscopy",
+ax.text(76, 206, "Object-level quality control for mitochondrial\nmorphometry in volume electron microscopy",
         fontsize=26, color="#B9CBE2", va="top", linespacing=1.4)
 
 
@@ -43,4 +43,6 @@ pill(x, 318, "13 measurement functions")
 pill(76, 378, "Biological-unit statistics")
 fig.savefig(OUT / "mitocensus_banner.png", dpi=144)
 plt.close(fig)
+# the README copy is 1.5 times the render size (2400 x 840), downsampled to keep the file small
+Image.open(OUT / "mitocensus_banner.png").convert("RGB").resize((W * 3 // 2, H * 3 // 2), Image.LANCZOS).save(OUT / "mitocensus_banner.png")
 print("written", OUT / "mitocensus_banner.png")
