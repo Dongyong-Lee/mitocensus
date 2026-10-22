@@ -661,3 +661,95 @@ def test_records_with_another_schema_are_rejected(tmp_path: Path) -> None:
         writer.writerows(records)
     with pytest.raises(ValueError, match="unsupported sample summary schema 'other.biological-analysis.v1'"):
         compare_biological_cohort(manifest, "control", tmp_path / "response", bootstrap_iterations=10, write_report=False)
+
+
+# --- 0.3.1 measurement geometry -------------------------------------------------------------------------------
+
+
+def _rows(output: Path) -> dict[int, dict]:
+    with (output / "objects.csv").open(newline="") as handle:
+        return {int(row["object_id"]): row for row in csv.DictReader(handle)}
+
+
+def test_small_pieces_do_not_make_a_label_disconnected(tmp_path: Path) -> None:
+    shape = (20, 48, 48)
+    z, y, x = np.indices(shape)
+    labels = np.zeros(shape, dtype=np.uint16)
+    labels[((z - 10) / 4) ** 2 + ((y - 24) / 6) ** 2 + ((x - 24) / 6) ** 2 <= 1] = 5
+    labels[3, 3:5, 40] = 5  # two stray voxels of the same label, far from the object
+    labels[((z - 10) / 3) ** 2 + ((y - 10) / 4) ** 2 + ((x - 10) / 4) ** 2 <= 1] = 6
+    labels[((z - 10) / 3) ** 2 + ((y - 38) / 4) ** 2 + ((x - 38) / 4) ** 2 <= 1] = 6  # a second large piece
+    raw = np.full(shape, 180, dtype=np.uint8)
+    raw[labels > 0] = 90
+    analyze_biological_sample(raw, labels, (30.0, 8.0, 8.0), tmp_path / "pieces", sample_id="pieces",
+                              config=BiologicalAnalysisConfig(), write_report=False)
+    rows = _rows(tmp_path / "pieces")
+    assert rows[5]["connected_component_count"] == "1"
+    assert rows[5]["ignored_fragment_voxels"] == "2"
+    assert rows[5]["morphology_evaluable"] == "True"
+    assert rows[6]["connected_component_count"] == "2"
+    assert "disconnected_instance_label" in rows[6]["non_evaluable_reason"]
+
+
+def test_skeleton_of_an_anisotropic_tube_has_no_branch_points() -> None:
+    from mitocensus.biological_analysis import _skeleton_features
+
+    rng = np.random.default_rng(7)
+    shape = (36, 48, 48)
+    z, y, x = np.indices(shape)
+    radius = 12 + rng.integers(-1, 2, size=(shape[0], 1, 1))  # a bumpy wall, as in segmented sections
+    mask = ((y - 24) ** 2 + (x - 24) ** 2 <= radius**2) & (z >= 3) & (z < 33)
+    features = _skeleton_features(mask, (30.0, 8.0, 8.0))
+    assert features["branch_points"] == 0
+    assert features["end_points"] == 2
+    assert 0.6 < features["skeleton_length_um_proxy"] < 0.95  # 900 nm tube
+
+
+def test_skeleton_counts_a_real_branch() -> None:
+    from mitocensus.biological_analysis import _skeleton_features
+
+    shape = (40, 120, 120)
+    z, y, x = np.indices(shape)
+    mask = np.zeros(shape, dtype=bool)
+    centre = np.array([20.0, 60.0, 60.0])
+    for angle in (0.0, 2.0943951, 4.1887902):  # three arms of 50 voxels, 120 degrees apart
+        direction = np.array([0.0, math.sin(angle), math.cos(angle)])
+        for t in np.linspace(0, 50, 101):
+            point = centre + t * direction
+            mask |= (z - point[0]) ** 2 + (y - point[1]) ** 2 + (x - point[2]) ** 2 <= 5**2
+    features = _skeleton_features(mask, (8.0, 8.0, 8.0))
+    assert features["branch_points"] == 1
+    assert features["end_points"] == 3
+
+
+def test_line_filter_ignores_the_boundary_band(tmp_path: Path) -> None:
+    shape = (12, 64, 64)
+    z, y, x = np.indices(shape)
+    distance = np.sqrt((y - 32) ** 2 + (x - 32) ** 2)
+    inside = (distance <= 20) & (z >= 2) & (z < 10)
+    labels = np.zeros(shape, dtype=np.uint16)
+    labels[inside] = 1
+    raw = np.full(shape, 200, dtype=np.uint8)
+    raw[inside] = 150
+    raw[inside & (distance >= 18)] = 40  # a dark 16-nm membrane band inside the boundary, no internal lines
+    analyze_biological_sample(raw, labels, (30.0, 8.0, 8.0), tmp_path / "band", sample_id="band",
+                              config=BiologicalAnalysisConfig(), write_report=False)
+    band = float(_rows(tmp_path / "band")[1]["line_filter_fraction"])
+    raw_lines = raw.copy()
+    raw_lines[inside & (distance < 12) & (np.abs(x - 32) % 6 == 0)] = 40  # internal crista-like lines
+    analyze_biological_sample(raw_lines, labels, (30.0, 8.0, 8.0), tmp_path / "lines", sample_id="lines",
+                              config=BiologicalAnalysisConfig(), write_report=False)
+    lines = float(_rows(tmp_path / "lines")[1]["line_filter_fraction"])
+    assert band < 0.01
+    assert lines > 0.05
+
+
+def test_boundary_measures_use_the_in_plane_rim() -> None:
+    from mitocensus.biological_analysis import _in_plane_rim
+
+    mask = np.zeros((7, 12, 12), dtype=bool)
+    mask[1:6, 2:10, 2:10] = True
+    rim = _in_plane_rim(mask)
+    assert not rim[1, 4:8, 4:8].any()  # the inside of the first section is a face, not the rim
+    assert rim[3, 2, 5] and rim[3, 5, 9]
+    assert int(rim.sum()) == 5 * 28

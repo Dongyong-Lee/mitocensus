@@ -5,7 +5,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-1F5F99"></a>
   <img alt="Python 3.10 or later" src="https://img.shields.io/badge/python-3.10%2B-1F5F99">
-  <img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-57606A">
+  <img alt="Version 0.3.1" src="https://img.shields.io/badge/version-0.3.1-57606A">
   <a href="https://doi.org/10.5281/zenodo.23390544"><img alt="DOI 10.5281/zenodo.23390544" src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23390544-0F766E"></a>
   <a href="CITATION.cff"><img alt="Cite this software" src="https://img.shields.io/badge/cite-CITATION.cff-CC79A7"></a>
 </p>
@@ -83,7 +83,7 @@ python -m pytest -q
 ```
 
 The minimal example is synthetic: 3-D inputs, the selected refinement checkpoint, the reconstruction policy, the
-expected outputs and their SHA-256 hashes. It runs on CPU and needs neither upstream segmenter. The 32 tests (134
+expected outputs and their SHA-256 hashes. It runs on CPU and needs neither upstream segmenter. The 37 tests (134
 parameterized subtests) use synthetic data only. `SHA256SUMS.txt` lists the SHA-256 checksum of every other file of the
 release; `shasum -a 256 -c SHA256SUMS.txt` checks them.
 
@@ -161,9 +161,9 @@ CellMap acquisitions are not demonstrated independent donors or biological repli
 
 ## Citing MitoCensus
 
-A manuscript describing MitoCensus is in preparation. Until it is published, cite the archived software: version 0.3.0
-is [10.5281/zenodo.23390545](https://doi.org/10.5281/zenodo.23390545), and
-[10.5281/zenodo.23390544](https://doi.org/10.5281/zenodo.23390544) resolves to the latest version.
+A manuscript describing MitoCensus is in preparation. Until it is published, cite the archived software:
+[10.5281/zenodo.23390544](https://doi.org/10.5281/zenodo.23390544) resolves to the latest version, and each version has
+its own DOI on that record (version 0.3.0 is [10.5281/zenodo.23390545](https://doi.org/10.5281/zenodo.23390545)).
 [CITATION.cff](CITATION.cff) holds the same metadata; GitHub's **Cite this repository** button gives APA and BibTeX.
 
 ## License

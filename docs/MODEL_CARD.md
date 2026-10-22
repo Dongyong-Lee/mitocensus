@@ -11,7 +11,7 @@
   cited by the frozen evaluation records
   (`c3dd763f878de379ad3ec612f65d984d18ce55e698cbab909f420a732e851ae5`).
 - Original-code license: MIT.
-- Release state: version 0.3.0, public at https://github.com/Dongyong-Lee/mitocensus;
+- Release state: version 0.3.1, public at https://github.com/Dongyong-Lee/mitocensus;
   a persistent archive identifier (DOI) is still required.
 
 ## Intended use
@@ -128,7 +128,7 @@ retained as audit-only and did not define C04.
 ## Reproducibility
 
 The release includes an exact conda environment, PEP 517 package, CLI,
-Linux-compatible Dockerfile, 32 tests (16 core and 16 object analysis) with 134
+Linux-compatible Dockerfile, 37 tests (16 core and 21 object analysis) with 134
 parameterized subtests, all on synthetic data, synthetic minimal inputs, frozen
 CPU outputs, dedicated core and biological-analysis verifiers, machine-readable
 contracts, and SHA-256 manifests. A Docker engine was unavailable on the tested

@@ -81,10 +81,24 @@ biological-unit-balanced control profile.
 ## Object checks
 
 Whole-object morphology excludes labels touching the analysis-volume boundary, because their size, topology and
-connectivity are truncated, and labels consisting of more than one connected component. Excluded labels remain in
+connectivity are truncated, and labels consisting of more than one connected component. Pieces of a label smaller
+than `--min-voxels` are dropped before the checks (their number of voxels is kept in `ignored_fragment_voxels`), so a
+few stray voxels do not make an otherwise whole object disconnected. Excluded labels remain in
 abundance and foreground-fraction outputs; every trait summary reports its denominator of QC-passing objects, and
 the object table records image-border, ROI-boundary and disconnected-label reasons separately. Fewer than 10
 QC-passing reference objects trigger a machine-readable calibration warning.
+
+### Measurement geometry
+
+- Skeletons are computed on cubic voxels at the finest voxel size, so anisotropic serial-section data are not
+  compressed along the section axis. A branch counts only when the skeleton extends beyond its junction by more than
+  the local diameter (twice the larger of the 3-D and in-section inscribed radius); shorter branches are surface
+  spurs and are ignored. `branch_points` counts junctions where at least three such branches meet, and
+  `skeleton_length_um_proxy` is the length of the skeleton without spurs.
+- The line-filter score and the matrix measures use interior voxels more than 48 nm from the object boundary in the
+  section plane, so the dark membrane band at the boundary does not count as line structure.
+- Boundary support and the weak-boundary fraction use the outline of each section; faces along the section axis,
+  which carry no membrane contrast in serial sections, are left out.
 
 ### Optional section-support rule, split-label screen and edge weights (3-D)
 

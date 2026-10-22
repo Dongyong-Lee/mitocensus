@@ -86,7 +86,7 @@ complete locally and what remains an author or public-release action.
   less than 0.08%, or by less than 1e-7 for values near zero; see
   `docs/REPRODUCIBILITY.md`.
 - PEP 517 package and `mitocensus` command-line entry point.
-- 32 tests (16 core and 16 object analysis) and 134 parameterized subtests
+- 37 tests (16 core and 21 object analysis) and 134 parameterized subtests
   pass on synthetic data, without non-distributed records.
 - CLI reads G011 from either a standalone policy or selected-model contract and
   invokes the v4 reconstruction implementation.

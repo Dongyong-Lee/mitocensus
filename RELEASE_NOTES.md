@@ -1,5 +1,24 @@
 # MitoCensus release notes
 
+## 0.3.1 (2026-10-22)
+
+Measurement fixes found by a panel-by-panel review of the software paper's figures. Checks and options are unchanged;
+measured values change.
+
+- Pieces of a label smaller than `--min-voxels` are dropped before the checks, so a few stray voxels no longer make a
+  whole object 'disconnected'. Dropped voxels are recorded per object (`ignored_fragment_voxels`).
+- Skeletons are computed on cubic voxels at the finest voxel size; terminal branches shorter than the local diameter
+  are treated as surface spurs; `branch_points` counts junctions of at least three real branches, and the skeleton
+  length is measured along the skeleton. Before, the skeleton of anisotropic data was computed in voxel units, and
+  spurs created branch-point voxels in compact or tube-shaped objects.
+- The line-filter score and the matrix measures use interior voxels more than 48 nm from the boundary in the section
+  plane (`line_filter_boundary_margin_nm`). Before, most counted line-filter voxels lay on the membrane band.
+- Boundary support and the weak-boundary fraction use the in-section outline of each object. Before, faces along the
+  section axis made up about half of the boundary voxels.
+- The mitochondria-on-a-string candidate no longer requires branch and end points, because a string of beads is
+  unbranched; it uses lobes, the neck ratio and elongation.
+- Five tests on synthetic data cover these cases (37 tests in total).
+
 ## 0.3.0 (2026-10-15)
 
 First public release.
