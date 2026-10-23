@@ -237,11 +237,22 @@ def _image(ax, img: np.ndarray) -> None:
         s.set_visible(False)
 
 
-def _scalebar(ax, spacing_xy: float, length_nm: float = 200.0) -> None:
+def _scalebar(ax, spacing_xy: float, length_nm: float = 200.0, label: bool = False) -> bool:
     px = length_nm / spacing_xy
     h, w = ax.images[0].get_array().shape[:2] if ax.images else (1, 1)
-    if px < w * 0.6:
-        ax.plot([w * 0.06, w * 0.06 + px], [h * 0.92, h * 0.92], color="white", lw=1.6, solid_capstyle="butt")
+    if px >= w * 0.6:
+        return False
+    ax.plot([w * 0.06, w * 0.06 + px], [h * 0.92, h * 0.92], color="white", lw=1.6, solid_capstyle="butt")
+    if label:
+        ax.text(w * 0.06, h * 0.86, f"{length_nm:g} nm", color="white", fontsize=6.5, va="bottom", ha="left")
+    return True
+
+
+def _labelled_scalebar(ax, spacing_xy: float) -> None:
+    """The longest of 200, 100 and 50 nm that fits, with its length written above it."""
+    for length in (200.0, 100.0, 50.0):
+        if _scalebar(ax, spacing_xy, length, label=True):
+            return
 
 
 _DPI = {"value": 150}
@@ -449,7 +460,7 @@ def _class_galleries(rows: list[dict], sample: _Sample, path: Path, k: int) -> t
 
 def _split_figure(rows: list[dict], summary: dict, sample: _Sample, path: Path, k: int) -> tuple[str | None, list[int]]:
     """One pair per group, as the check compared it: the end section of one label (blue) and the label under its
-    footprint in the nearest labelled section (vermillion), with the footprint repeated as a dashed line and the IoU.
+    footprint in the nearest labelled section (vermilion), with the footprint repeated as a dashed line and the IoU.
     Pairs with a QC-passing label and a high IoU are shown first."""
     qc = summary.get("quality_control_v2") or {}
     groups = qc.get("split_label_groups") or []
@@ -501,7 +512,7 @@ def _split_figure(rows: list[dict], summary: dict, sample: _Sample, path: Path, 
         right.set_title(f"ID {b}, section {zb}\nIoU {float(link['iou']):.2f}", fontsize=7.5)
         for ax in (left, right):
             ax.set_anchor("N")
-    fig.suptitle(f"Possible splits: where one label ends (blue), another label (vermillion) lies under it up to "
+    fig.suptitle(f"Possible splits: where one label ends (blue), another label (vermilion) lies under it up to "
                  f"{max_gap} sections away\n(dashed, the outline of the label that ends; one pair per group; bar 200 nm)",
                  fontsize=8.5, x=0.01, ha="left", va="top", y=1 - 0.04 / height)
     return _save(fig, path), shown
@@ -600,6 +611,8 @@ def _object_page(row: dict, sample: _Sample, path: Path) -> dict:
             ax = fig.add_axes([0.01 + j * 0.105, 0.56, 0.098, 0.38])
             _image(ax, sample.normalized[z][ys, xs])
             _outline(ax, sample.labels[z][ys, xs] == dense, color)
+            if j == 0:
+                _labelled_scalebar(ax, sample.spacing[-1])
             ax.set_title(f"section {z}", fontsize=7.5)
         ax = fig.add_axes([0.0, 0.03, 0.2, 0.46], projection="3d")
         ax.computed_zorder = False
@@ -636,6 +649,8 @@ def _object_page(row: dict, sample: _Sample, path: Path) -> dict:
         overlay[layer2d[key]] = (*rgb, 0.85)
         ax.imshow(overlay, interpolation="nearest")
         _outline(ax, object_mask[zloc] if sample.ndim == 3 else object_mask, COLORS["rim"], lw=0.5)
+        if j == 0:
+            _labelled_scalebar(ax, sample.spacing[-1])
         ax.set_title(title, fontsize=7.5)
     values = [("Volume", f"{_number(row.get('physical_size')):.3g} µm³" if sample.ndim == 3
                else f"{_number(row.get('physical_size')):.3g} µm²"),
@@ -730,8 +745,8 @@ def write_visual_record(raw: np.ndarray, instances: np.ndarray, spacing_nm: Sequ
               "<p class=note>Labels that span too few sections cannot support whole-object shape measures: their "
               "extent across sections reflects the sampling, not the object. They stay in abundance summaries.</p>"]
     blocks += ["<h2>Amount, size, spacing and review flags</h2>", f"<img src=\"{files['summary']}\" alt=\"sample summary\">",
-               "<p class=note>Dotted lines: the whole region (amount) and the distance expected for randomly placed "
-               "objects (spacing); solid line: median size; dashed vermillion line: edge-weighted mean size (when "
+               "<p class=note>Dashed black lines: the whole region (amount) and the distance expected for randomly placed "
+               "objects (spacing); solid line: median size; dashed vermilion line: edge-weighted mean size (when "
                "edge weights are on). Size, spacing and flags are computed from QC-passing objects only. A single "
                "small region holds few whole objects; pool regions before interpreting sizes.</p>"]
     if thin_png:
