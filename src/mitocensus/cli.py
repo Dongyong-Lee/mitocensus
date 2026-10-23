@@ -1,25 +1,41 @@
-"""MitoCensus command line: object-level measurement and quality control (analyze-biological), cohort comparison
-by biological unit (compare-biological) and the optional refinement module (infer-from-priors)."""
+"""MitoCensus command line: object-level measurement and quality control (analyze-biological), its visual record
+(visual-record), cohort comparison by biological unit (compare-biological) and the optional refinement module
+(infer-from-priors, needs PyTorch: python -m pip install '.[refinement]')."""
 
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 
 import numpy as np
 import tifffile
-import torch
 
 from .biological_analysis import (
     BiologicalAnalysisConfig,
+    _read_csv,
     analyze_biological_sample,
     compare_biological_cohort,
 )
-from .instances_v4 import reconstruct_with_policy_v4
-from .stage_c import load_checkpoint, sha256
-from .whole_volume import candidate_probability_slice, normalize_volume
+
+
+def sha256(path: Path) -> str:
+    value = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+            value.update(block)
+    return value.hexdigest()
+
+
+def optional_float(value: str) -> float | None:
+    if str(value).strip().lower() in {"none", "off", "0"}:
+        return None
+    number = float(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("expected a positive number or 'none'")
+    return number
 
 
 def read_volume(path: Path) -> np.ndarray:
@@ -96,6 +112,14 @@ def read_policy(path: Path | None) -> dict | None:
 
 
 def command_infer(args: argparse.Namespace) -> None:
+    try:
+        import torch
+    except ImportError as exc:  # optional dependency
+        raise SystemExit("the refinement module needs PyTorch: python -m pip install '.[refinement]'") from exc
+    from .instances_v4 import reconstruct_with_policy_v4
+    from .stage_c import load_checkpoint
+    from .whole_volume import candidate_probability_slice, normalize_volume
+
     device = torch.device("mps" if torch.backends.mps.is_available() and not args.cpu else "cpu")
     model, config = load_checkpoint(args.checkpoint, device)
     raw_source = read_volume(args.raw)
@@ -194,8 +218,10 @@ def command_analyze_biological(args: argparse.Namespace) -> None:
         shell_width_nm=args.shell_width_nm,
         maximum_objects=args.maximum_objects,
         min_axial_sections=args.min_axial_sections,
+        min_axial_extent_nm=args.min_axial_extent_nm,
         split_screen_min_iou=args.split_screen_min_iou,
         split_screen_max_gap_sections=args.split_screen_max_gap_sections,
+        split_screen_action=args.split_screen_action,
         edge_correction_weights=args.edge_correction_weights,
     )
     summary = analyze_biological_sample(
@@ -209,6 +235,8 @@ def command_analyze_biological(args: argparse.Namespace) -> None:
         reference_profile=profile,
         config=config,
         write_report=not args.no_report,
+        write_visual_record=not args.no_visual_record,
+        visual_record_options={"max_object_pages": args.visual_record_objects},
     )
     output_files = {
         path.name: {"bytes": path.stat().st_size, "sha256": sha256(path)}
@@ -244,6 +272,27 @@ def command_analyze_biological(args: argparse.Namespace) -> None:
     (args.output / "analysis_manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True, allow_nan=False) + "\n"
     )
+
+
+def command_visual_record(args: argparse.Namespace) -> None:
+    from .visual_record import write_visual_record
+
+    summary = json.loads((args.analysis / "sample_summary.json").read_text())
+    settings = summary.get("configuration", {})
+    known = BiologicalAnalysisConfig.__dataclass_fields__
+    values = {k: (tuple(v) if isinstance(v, list) else v) for k, v in settings.items() if k in known}
+    config = BiologicalAnalysisConfig(**values)
+    spacing = tuple(float(v) for v in summary.get("spacing_nm") or summary.get("voxel_size_nm") or [])
+    if not spacing:
+        raise SystemExit("sample_summary.json does not record the spacing")
+    raw = read_analysis_image(args.raw)
+    instances = read_analysis_image(args.instances)
+    roi = None if args.roi is None else read_analysis_image(args.roi).astype(bool)
+    rows = _read_csv(args.analysis / "objects.csv")
+    record = write_visual_record(raw, instances, spacing, rows, summary, args.output or args.analysis / "visual_record",
+                                 sample_id=str(summary.get("sample_id", "sample")), config=config, roi=roi,
+                                 max_object_pages=args.visual_record_objects)
+    print(json.dumps(record["consistency"]))
 
 
 def command_compare_biological(args: argparse.Namespace) -> None:
@@ -348,23 +397,52 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--shell-width-nm", type=float, default=40.0)
     analyze.add_argument("--maximum-objects", type=int)
     analyze.add_argument(
+        "--min-axial-extent-nm",
+        type=optional_float,
+        default=90.0,
+        help="section-extent check (3-D): exclude labels whose extent across sections (sections x thickness) is below "
+             "this from whole-object morphometry; default 90 nm, 'none' turns it off",
+    )
+    analyze.add_argument(
         "--min-axial-sections",
         type=int,
-        help="QC v2: exclude objects present in fewer serial sections from whole-object morphometry (e.g. 3)",
+        help="count-based form of the section check (0.3.x), e.g. 3; off by default",
     )
     analyze.add_argument(
         "--split-screen-min-iou",
-        type=float,
-        help="QC v2: flag border-free single-component labels whose end-section footprint continues in another label (e.g. 0.4)",
+        type=optional_float,
+        default=0.4,
+        help="split screen: border-free single-component labels whose end-section footprint continues in another label "
+             "(IoU >= this); default 0.4, 'none' turns it off",
     )
     analyze.add_argument("--split-screen-max-gap-sections", type=int, default=3)
+    analyze.add_argument(
+        "--split-screen-action",
+        choices=("flag", "exclude"),
+        default="flag",
+        help="flag (default): keep flagged labels QC-passing and mark them for review; exclude: 0.3.x behaviour",
+    )
     analyze.add_argument(
         "--edge-correction-weights",
         action="store_true",
         help="report Miles-Lantuejoul weights for border-free objects and a weighted size summary",
     )
     analyze.add_argument("--no-report", action="store_true")
+    analyze.add_argument("--no-visual-record", action="store_true", help="do not write visual_record/")
+    analyze.add_argument("--visual-record-objects", type=int, default=24, help="maximum object pages in the visual record")
     analyze.set_defaults(function=command_analyze_biological)
+
+    visual = subparsers.add_parser(
+        "visual-record",
+        help="(re)write the visual record of a finished analyze-biological output from its raw image and labels",
+    )
+    visual.add_argument("--analysis", type=Path, required=True, help="output directory of analyze-biological")
+    visual.add_argument("--raw", type=Path, required=True)
+    visual.add_argument("--instances", type=Path, required=True)
+    visual.add_argument("--roi", type=Path)
+    visual.add_argument("--output", type=Path, help="default: ANALYSIS/visual_record")
+    visual.add_argument("--visual-record-objects", type=int, default=24)
+    visual.set_defaults(function=command_visual_record)
 
     compare = subparsers.add_parser(
         "compare-biological",

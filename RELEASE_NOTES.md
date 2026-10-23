@@ -1,5 +1,30 @@
 # MitoCensus release notes
 
+## 0.4.0 (unreleased)
+
+The section check is on by default, the split screen flags rather than excludes, and every analysis writes a visual
+record. Measured values do not change; which labels enter whole-object morphometry by default does.
+
+- **Section-extent check on by default (3-D).** `--min-axial-extent-nm` (default 90 nm) excludes labels whose extent
+  across sections, distinct sections times section thickness, is below the threshold from whole-object morphometry
+  (reason `axial_extent_below_minimum`, class `not_evaluable_thin_profile`); they stay in abundance summaries. The
+  threshold is physical, so it applies to serial sections and to isotropic data alike. `--min-axial-sections` (the
+  0.3.x count-based form) is still available; `none` turns the extent check off.
+- **Split screen as a review flag by default.** `--split-screen-min-iou 0.4` is on by default with
+  `--split-screen-action flag`: flagged labels stay QC-passing and are marked for review (`split_label_candidate`,
+  `split_label_group`, `manual_review_recommended`). `--split-screen-action exclude` restores the 0.3.x exclusion.
+- **Visual record.** `analyze-biological` writes `visual_record/index.html` (when matplotlib is installed and the
+  report is on; `--no-visual-record` skips it): the check outcome, the labels excluded as too thin, QC-passing objects
+  by shape class across volume quantiles, possible splits, and object pages with the sections an object spans, its
+  surface, its skeleton after pruning and the voxels counted by the line-filter, matrix and weak-boundary measures.
+  The displayed layers come from the measurement code; `visual_record.json` records that the features recomputed from
+  them equal `objects.csv`. `mitocensus visual-record` rewrites the record from a finished analysis.
+- **PyTorch only for the refinement module.** Measurement, comparison and the visual record no longer import PyTorch;
+  install it with `python -m pip install '.[refinement]'` for `infer-from-priors`.
+- With `--min-axial-extent-nm none --split-screen-min-iou none` (0.3.1 defaults) or `--min-axial-extent-nm none
+  --min-axial-sections 3 --split-screen-action exclude` (0.3.1 "all checks"), 0.4.0 writes the same `objects.csv` and
+  `contacts.csv` as 0.3.1. Seven tests were added (44 in total).
+
 ## 0.3.1 (2026-10-22)
 
 Measurement fixes found by a panel-by-panel review of the software paper's figures. Checks and options are unchanged;

@@ -67,7 +67,7 @@ def test_all_thirteen_functions_and_outputs_are_emitted(tmp_path: Path) -> None:
         output,
         sample_id="sample-1",
         group="control",
-        config=BiologicalAnalysisConfig(min_voxels=5),
+        config=BiologicalAnalysisConfig(min_voxels=5, min_axial_extent_nm=None, split_screen_min_iou=None),
         write_report=False,
     )
     assert tuple(summary["functions"]) == FUNCTION_NAMES
@@ -514,19 +514,51 @@ def _qc2_volume() -> tuple[np.ndarray, np.ndarray]:
     return raw, labels
 
 
-def test_qc_v2_defaults_keep_v1_behaviour(tmp_path: Path) -> None:
+def test_v031_settings_keep_v1_behaviour(tmp_path: Path) -> None:
     raw, labels = _qc2_volume()
+    config = BiologicalAnalysisConfig(min_axial_extent_nm=None, split_screen_min_iou=None)
     summary = analyze_biological_sample(raw, labels, (30.0, 8.0, 8.0), tmp_path / "v1", sample_id="v1",
-                                        write_report=False)
+                                        config=config, write_report=False)
     rows = {int(float(r["object_id"])): r for r in csv.DictReader((tmp_path / "v1/objects.csv").open())}
     assert all(rows[i]["morphology_evaluable"] == "True" for i in (1, 2, 3, 4))
     assert summary["quality_control_v2"]["enabled"] is False
     assert rows[2]["axial_sections"] == "1"
 
 
+def test_default_extent_check_and_split_flag(tmp_path: Path) -> None:
+    raw, labels = _qc2_volume()
+    summary = analyze_biological_sample(raw, labels, (30.0, 8.0, 8.0), tmp_path / "v4", sample_id="v4",
+                                        write_report=False, write_visual_record=False)
+    rows = {int(float(r["object_id"])): r for r in csv.DictReader((tmp_path / "v4/objects.csv").open())}
+    assert rows[1]["morphology_evaluable"] == "True"
+    assert rows[2]["morphology_evaluable"] == "False"
+    assert "axial_extent_below_minimum" in rows[2]["non_evaluable_reason"]
+    assert rows[2]["shape_class"] == "not_evaluable_thin_profile"
+    for i in (3, 4):  # flagged for review, still QC-passing
+        assert rows[i]["split_label_candidate"] == "True"
+        assert rows[i]["morphology_evaluable"] == "True"
+        assert rows[i]["manual_review_recommended"] == "True"
+        assert "split_label_candidate" not in rows[i]["non_evaluable_reason"]
+    qc = summary["quality_control_v2"]
+    assert qc["enabled"] is True and qc["split_screen_action"] == "flag"
+    assert qc["split_label_groups"] == [[3, 4]] and qc["split_label_flagged_objects"] == 2
+    assert qc["objects_below_min_axial_extent"] == 1 and qc["min_axial_extent_nm"] == 90.0
+
+
+def test_extent_check_is_physical(tmp_path: Path) -> None:
+    raw, labels = _qc2_volume()
+    # object 1 spans 7 sections: 7 x 12 nm = 84 nm < 90 nm on a finer grid, 7 x 30 nm passes
+    fine = analyze_biological_sample(raw, labels, (12.0, 8.0, 8.0), tmp_path / "fine", sample_id="f",
+                                     write_report=False, write_visual_record=False)
+    rows = {int(float(r["object_id"])): r for r in csv.DictReader((tmp_path / "fine/objects.csv").open())}
+    assert "axial_extent_below_minimum" in rows[1]["non_evaluable_reason"]
+    assert fine["quality_control_v2"]["objects_below_min_axial_extent"] == 4
+
+
 def test_qc_v2_excludes_slivers_and_flags_split_labels(tmp_path: Path) -> None:
     raw, labels = _qc2_volume()
-    config = BiologicalAnalysisConfig(min_axial_sections=3, split_screen_min_iou=0.4)
+    config = BiologicalAnalysisConfig(min_axial_sections=3, split_screen_min_iou=0.4, split_screen_action="exclude",
+                                      min_axial_extent_nm=None)
     summary = analyze_biological_sample(raw, labels, (30.0, 8.0, 8.0), tmp_path / "v2", sample_id="v2",
                                         config=config, write_report=False)
     rows = {int(float(r["object_id"])): r for r in csv.DictReader((tmp_path / "v2/objects.csv").open())}
@@ -600,7 +632,8 @@ def test_split_screen_links_a_qc_passing_label_to_a_thin_continuation(tmp_path: 
     labels[6:10, 10:20, 10:20] = 2       # ... continued, after two unlabelled sections, by a 4-section label
     labels[4:12, 26:34, 26:34] = 3       # unrelated object
     raw[labels > 0] = 0.25
-    config = BiologicalAnalysisConfig(min_axial_sections=3, split_screen_min_iou=0.4)
+    config = BiologicalAnalysisConfig(min_axial_sections=3, split_screen_min_iou=0.4, split_screen_action="exclude",
+                                      min_axial_extent_nm=None)
     summary = analyze_biological_sample(raw, labels, (30.0, 8.0, 8.0), tmp_path / "out", sample_id="s",
                                         config=config, write_report=False)
     rows = {int(float(r["object_id"])): r for r in csv.DictReader((tmp_path / "out/objects.csv").open())}

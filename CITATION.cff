@@ -3,7 +3,7 @@ message: "If you use MitoCensus, please cite it using the metadata below."
 type: software
 title: "MitoCensus: object-level quality control for mitochondrial morphometry in volume electron microscopy"
 abstract: "MitoCensus turns a volume electron microscopy stack and any aligned mitochondrial instance mask into an object-linked measurement record. Every label is traced to its source sections and checked before it is measured; excluded labels stay visible, edge bias from a finite crop can be corrected, and cohort statistics are computed by biological unit rather than by object."
-version: 0.3.1
+version: 0.4.0
 date-released: 2026-10-22
 doi: 10.5281/zenodo.23390544
 identifiers:

@@ -72,6 +72,10 @@ The output directory contains:
 - `reference_profile.json`: the feature calibration used for candidate flags;
 - `manual_review_instances.tif`: only flagged object IDs, aligned to the input;
 - `biological_report.png`: a compact visual report;
+- `visual_record/`: `index.html` and PNG images showing every check and measurement on its object, sections and
+  voxels (check outcome, labels excluded as too thin, QC-passing objects by shape class, possible splits, object
+  pages), and `visual_record.json`, which records that the features recomputed from the displayed voxels equal
+  `objects.csv`;
 - `analysis_manifest.json`: input/output SHA-256 hashes and the claim boundaries copied into the run provenance.
 
 Without an external reference profile, candidate flags use the sample itself as an explicitly recorded exploratory
@@ -100,27 +104,32 @@ QC-passing reference objects trigger a machine-readable calibration warning.
 - Boundary support and the weak-boundary fraction use the outline of each section; faces along the section axis,
   which carry no membrane contrast in serial sections, are left out.
 
-### Optional section-support rule, split-label screen and edge weights (3-D)
+### Section-extent check, split screen and edge weights (3-D)
 
-Three opt-in options tighten whole-object morphometry. With the defaults, only the border and connectivity checks
-above apply; the outputs still carry four object columns (`axial_sections`, `axial_extent_nm`,
-`split_label_candidate`, `split_label_group`) and five summary entries (the four option settings under
-`configuration`, and `quality_control_v2`) that record the options.
+Since 0.4.0 the section-extent check and the split screen (as a review flag) are on by default for 3-D data; edge
+weights are opt-in. The outputs carry four object columns (`axial_sections`, `axial_extent_nm`,
+`split_label_candidate`, `split_label_group`) and record the settings under `configuration` and
+`quality_control_v2` in `sample_summary.json`.
 
 ```bash
 mitocensus analyze-biological ... \
-  --min-axial-sections 3 \
-  --split-screen-min-iou 0.4 --split-screen-max-gap-sections 3 \
+  --min-axial-extent-nm 90 \
+  --split-screen-min-iou 0.4 --split-screen-max-gap-sections 3 --split-screen-action flag \
   --edge-correction-weights
 ```
 
-- `--min-axial-sections N` excludes objects present in fewer than `N` serial sections from whole-object morphometry
-  (reason `axial_sections_below_minimum`, class `not_evaluable_thin_profile`). With little extent across sections,
-  the minor axis of such objects is set by the voxel spacing, so their shape values are not interpretable.
-- `--split-screen-min-iou T` flags labels whose first- or last-section footprint continues, within
-  `--split-screen-max-gap-sections` sections, in another border-free single-component label with footprint
-  IoU >= `T` (`split_label_candidate`, `split_label_group`; class `not_evaluable_split_label_candidate`). Labels are
-  never merged or re-measured. The screen detects splits across sections, not side-by-side splits.
+- `--min-axial-extent-nm E` (default 90; `none` turns it off) excludes labels whose extent across sections, distinct
+  sections times section thickness, is below `E` nm from whole-object morphometry (reason
+  `axial_extent_below_minimum`, class `not_evaluable_thin_profile`). With little extent across sections, the minor
+  axis of such labels is set by the voxel spacing, so their shape values are not interpretable. Because the threshold
+  is physical, the same value serves serial sections and isotropic data. `--min-axial-sections N` is the 0.3.x
+  count-based form (reason `axial_sections_below_minimum`).
+- `--split-screen-min-iou T` (default 0.4; `none` turns it off) flags labels whose first- or last-section footprint
+  continues, within `--split-screen-max-gap-sections` sections, in another border-free single-component label with
+  footprint IoU >= `T` (`split_label_candidate`, `split_label_group`). With `--split-screen-action flag` (default)
+  flagged labels stay QC-passing and are marked for review; with `exclude` they are excluded from whole-object
+  morphometry (class `not_evaluable_split_label_candidate`, the 0.3.x behaviour). Labels are never merged or
+  re-measured. The screen detects splits across sections, not side-by-side splits.
 - `--edge-correction-weights` writes the discrete Miles–Lantuéjoul weight `prod_i L_i / (L_i - b_i - 1)`
   (`edge_correction_weight`) for border-free objects and adds weighted and unweighted mean sizes to
   `sample_summary.json` (`edge_correction`). The weighted mean of one small region with few objects is itself a noisy

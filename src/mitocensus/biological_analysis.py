@@ -139,13 +139,18 @@ class BiologicalAnalysisConfig:
     max_pca_voxels: int = 100_000
     maximum_objects: int | None = None
     random_seed: int = 20260829
-    # QC v2 (opt-in; None keeps the v1 behaviour): objects present in fewer than ``min_axial_sections`` serial
-    # sections, and border-free single-component labels whose end-section footprint continues in another such label within
-    # ``split_screen_max_gap_sections`` sections (IoU >= ``split_screen_min_iou``), are kept in abundance summaries
-    # but excluded from whole-object morphometry and flagged for review.
+    # Section checks (3-D only). Since 0.4.0 the section-extent check is on by default: objects whose extent across
+    # sections (distinct sections x section thickness) is below ``min_axial_extent_nm`` (90 nm, three 30-nm sections)
+    # are kept in abundance summaries but excluded from whole-object morphometry. ``min_axial_sections`` is the 0.3.x
+    # count-based form (None = off). The split screen looks for border-free single-component labels whose end-section
+    # footprint continues in another such label within ``split_screen_max_gap_sections`` sections (IoU >=
+    # ``split_screen_min_iou``); with ``split_screen_action`` "flag" (default since 0.4.0) such labels stay QC-passing
+    # and are flagged for review, with "exclude" (0.3.x behaviour) they are excluded from whole-object morphometry.
     min_axial_sections: int | None = None
-    split_screen_min_iou: float | None = None
+    min_axial_extent_nm: float | None = 90.0
+    split_screen_min_iou: float | None = 0.4
     split_screen_max_gap_sections: int = 3
+    split_screen_action: str = "flag"
     # Edge correction (opt-in): border-free objects in a finite region under-represent large objects. When enabled,
     # each border-free object receives the discrete Miles-Lantuejoul weight prod_i L_i / (L_i - b_i - 1), where L is
     # the analysed region's bounding-box length and b the object's bounding-box extent (voxels), and the summary
@@ -173,6 +178,10 @@ class BiologicalAnalysisConfig:
             raise ValueError("maximum_objects must be positive when supplied")
         if self.min_axial_sections is not None and self.min_axial_sections < 1:
             raise ValueError("min_axial_sections must be positive when supplied")
+        if self.min_axial_extent_nm is not None and not self.min_axial_extent_nm > 0:
+            raise ValueError("min_axial_extent_nm must be positive when supplied")
+        if self.split_screen_action not in ("flag", "exclude"):
+            raise ValueError("split_screen_action must be 'flag' or 'exclude'")
         if self.split_screen_min_iou is not None and not 0 < self.split_screen_min_iou <= 1:
             raise ValueError("split_screen_min_iou must lie in (0, 1]")
         if self.split_screen_max_gap_sections < 1:
@@ -655,16 +664,36 @@ def _keep_points(skeleton: np.ndarray, points: np.ndarray, keep: np.ndarray) -> 
     return out
 
 
+def _pruned_skeleton(
+    mask: np.ndarray,
+    spacing_nm: tuple[float, ...],
+    config: "BiologicalAnalysisConfig",
+) -> tuple[np.ndarray, float, np.ndarray, np.ndarray | None, int]:
+    """Cubic-voxel mask, its step (nm), the pruned skeleton, the distance map and the branch-point count."""
+
+    isotropic, step = _isotropic_mask(mask, spacing_nm)
+    # scikit-image releases differ here: some return bool and older releases
+    # return uint8 values in {0, 255}.  Normalize before boolean indexing.
+    skeleton = np.asarray(morphology.skeletonize(isotropic), dtype=bool)
+    if not skeleton.any():
+        return isotropic, step, skeleton, None, 0
+    distance = ndi.distance_transform_edt(isotropic, sampling=(step,) * isotropic.ndim)
+    # The local scale for branches is the larger of the 3-D and in-section radius, so that flat (one-section) objects
+    # are judged by their width in the section plane rather than by their thickness.
+    scale = np.maximum(distance, _in_plane_distance(isotropic, (step,) * isotropic.ndim))
+    pruned, branch_points, _ = _analyze_skeleton(skeleton, scale, step, config.skeleton_spur_radius_factor)
+    if pruned.any():
+        skeleton = pruned
+    return isotropic, step, skeleton, distance, int(branch_points)
+
+
 def _skeleton_features(
     mask: np.ndarray,
     spacing_nm: tuple[float, ...],
     config: "BiologicalAnalysisConfig | None" = None,
 ) -> dict[str, float | int]:
     config = config or BiologicalAnalysisConfig()
-    isotropic, step = _isotropic_mask(mask, spacing_nm)
-    # scikit-image releases differ here: some return bool and older releases
-    # return uint8 values in {0, 255}.  Normalize before boolean indexing.
-    skeleton = np.asarray(morphology.skeletonize(isotropic), dtype=bool)
+    isotropic, step, skeleton, distance, branch_points = _pruned_skeleton(mask, spacing_nm, config)
     if not skeleton.any():
         return {
             "skeleton_length_um_proxy": 0.0,
@@ -676,13 +705,6 @@ def _skeleton_features(
             "neck_ratio": math.nan,
             "lobe_count": 0,
         }
-    distance = ndi.distance_transform_edt(isotropic, sampling=(step,) * isotropic.ndim)
-    # The local scale for branches is the larger of the 3-D and in-section radius, so that flat (one-section) objects
-    # are judged by their width in the section plane rather than by their thickness.
-    scale = np.maximum(distance, _in_plane_distance(isotropic, (step,) * isotropic.ndim))
-    pruned, branch_points, _ = _analyze_skeleton(skeleton, scale, step, config.skeleton_spur_radius_factor)
-    if pruned.any():
-        skeleton = pruned
     points, graph = _skeleton_graph(skeleton, step)
     degree = np.diff(graph.indptr) if len(points) else np.zeros(0, dtype=np.int64)
     length_nm = float(csgraph.minimum_spanning_tree(graph).sum()) if len(points) > 1 else 0.0
@@ -757,7 +779,10 @@ def _internal_features(
     object_mask: np.ndarray,
     spacing_nm: tuple[float, ...],
     config: BiologicalAnalysisConfig,
-) -> dict[str, float]:
+    return_layers: bool = False,
+):
+    """Intensity-based features of one object. With ``return_layers`` the voxel sets behind them are returned too
+    (core, line-filter ridge, matrix, in-plane rim and its weak part), so that a display shows the voxels counted."""
     erosion = ndi.binary_erosion(object_mask, iterations=1, border_value=0)
     interior = erosion if erosion.sum() >= max(10, object_mask.ndim * 3) else object_mask
     # Interior voxels away from the membrane band: more than the margin from the boundary in the section plane.
@@ -843,7 +868,7 @@ def _internal_features(
     second_fraction = float((gradient[second_shell] >= global_edge_threshold).mean()) if second_shell.any() else 0.0
     double_membrane_score = float(math.sqrt(max(first_fraction, 0) * max(second_fraction, 0)))
 
-    return {
+    features = {
         "line_filter_fraction": line_filter_value,
         "line_filter_spacing_nm": spacing_value,
         "line_filter_coherence": coherence,
@@ -856,6 +881,16 @@ def _internal_features(
         "weak_boundary_fraction": weak_boundary_value,
         "perimito_double_membrane_score": double_membrane_score,
     }
+    if not return_layers:
+        return features
+    layers = {
+        "core": core,
+        "line_filter_ridge": ridge,
+        "matrix": matrix,
+        "boundary_rim": boundary,
+        "weak_boundary": boundary & (gradient < support_threshold),
+    }
+    return features, layers
 
 
 def _drop_small_pieces(labels: np.ndarray, min_voxels: int) -> tuple[np.ndarray, dict[int, int]]:
@@ -994,6 +1029,13 @@ def _measure_objects(
         ):
             morphology_evaluable = False
             non_evaluable_reasons.append("axial_sections_below_minimum")
+        if (
+            labels.ndim == 3
+            and config.min_axial_extent_nm is not None
+            and axial_extent_nm < config.min_axial_extent_nm * (1 - 1e-9)
+        ):
+            morphology_evaluable = False
+            non_evaluable_reasons.append("axial_extent_below_minimum")
         edge_weight = math.nan
         if region_lengths is not None and not border_touching:
             room = region_lengths - bbox_shape - 1
@@ -1057,8 +1099,12 @@ def _split_label_screen(
     *,
     min_iou: float,
     max_gap: int,
+    action: str = "exclude",
 ) -> list[list[int]]:
     """Flag labels whose end-section footprint continues in another label across unlabelled sections.
+
+    With ``action`` "exclude" (0.3.x) flagged labels are excluded from whole-object morphometry; with "flag" they stay
+    QC-passing and only carry the flag and its group.
 
     Candidates are all border-free, single-component labels (whether or not they pass the section-count rule).
     For each candidate, the footprint in its first and last section is compared with the label that occupies most
@@ -1108,9 +1154,10 @@ def _split_label_screen(
             row = by_id[source_id]
             row["split_label_candidate"] = True
             row["split_label_group"] = index
-            row["morphology_evaluable"] = False
-            reasons = [item for item in str(row["non_evaluable_reason"]).split(";") if item]
-            row["non_evaluable_reason"] = ";".join(reasons + ["split_label_candidate"])
+            if action == "exclude":
+                row["morphology_evaluable"] = False
+                reasons = [item for item in str(row["non_evaluable_reason"]).split(";") if item]
+                row["non_evaluable_reason"] = ";".join(reasons + ["split_label_candidate"])
     return ordered
 
 
@@ -1352,7 +1399,7 @@ def _qc_v2_reason(row: dict) -> str | None:
     if int(row.get("connected_component_count", 1) or 1) != 1:
         return None
     reasons = str(row.get("non_evaluable_reason", "") or "")
-    if "axial_sections_below_minimum" in reasons:
+    if "axial_sections_below_minimum" in reasons or "axial_extent_below_minimum" in reasons:
         return "not_evaluable_thin_profile"
     if "split_label_candidate" in reasons:
         return "not_evaluable_split_label_candidate"
@@ -2137,8 +2184,16 @@ def analyze_biological_sample(
     reference_profile: dict | None = None,
     config: BiologicalAnalysisConfig | None = None,
     write_report: bool = True,
+    write_visual_record: bool | None = None,
+    visual_record_options: dict | None = None,
 ) -> dict:
-    """Compute all single-sample biological-analysis functions and write outputs."""
+    """Compute all single-sample biological-analysis functions and write outputs.
+
+    With ``write_visual_record`` (default: the same as ``write_report``; needs matplotlib) a visual record is written to
+    ``output/visual_record``: every check and measurement drawn on its object, sections and voxels (see
+    ``mitocensus.visual_record``)."""
+    if write_visual_record is None:
+        write_visual_record = write_report
 
     config = config or BiologicalAnalysisConfig()
     config.validate()
@@ -2193,6 +2248,7 @@ def analyze_biological_sample(
             {source: dense for dense, source in dense_to_source.items()},
             min_iou=config.split_screen_min_iou,
             max_gap=config.split_screen_max_gap_sections,
+            action=config.split_screen_action,
         )
     spatial = _spatial_features(rows, raw.ndim, roi_array, spacing)
     contacts = _contact_features(
@@ -2240,6 +2296,10 @@ def analyze_biological_sample(
         profile = _feature_profile(profile_rows, profile_source)
         profile["n_qc_passing_objects"] = len(qc_passing_rows)
     classify_objects(rows, profile)
+    if config.split_screen_action == "flag":
+        for row in rows:
+            if row.get("split_label_candidate"):
+                row["manual_review_recommended"] = True
     summary = summarize_sample(
         rows,
         contacts,
@@ -2269,16 +2329,24 @@ def analyze_biological_sample(
     }
     summary["configuration"] = asdict(config)
     summary["quality_control_v2"] = {
-        "enabled": config.min_axial_sections is not None or config.split_screen_min_iou is not None,
+        "enabled": (config.min_axial_sections is not None or config.min_axial_extent_nm is not None
+                    or config.split_screen_min_iou is not None),
         "min_axial_sections": config.min_axial_sections,
         "objects_below_min_axial_sections": sum(
             "axial_sections_below_minimum" in str(row.get("non_evaluable_reason", "")) for row in rows
         ),
+        "min_axial_extent_nm": config.min_axial_extent_nm,
+        "objects_below_min_axial_extent": sum(
+            "axial_extent_below_minimum" in str(row.get("non_evaluable_reason", "")) for row in rows
+        ),
         "split_screen_min_iou": config.split_screen_min_iou,
         "split_screen_max_gap_sections": config.split_screen_max_gap_sections,
+        "split_screen_action": config.split_screen_action,
+        "split_label_flagged_objects": sum(bool(row.get("split_label_candidate")) for row in rows),
         "split_label_groups": split_groups,
-        "note": "flagged objects stay in abundance summaries and are excluded from whole-object morphometry; "
-                "labels are never merged or re-measured",
+        "note": "objects excluded by a section check stay in abundance summaries and are excluded from whole-object "
+                "morphometry; split-screen labels are flagged for review (and excluded only with the 'exclude' "
+                "action); labels are never merged or re-measured",
     }
     if config.edge_correction_weights:
         region_box = ndi.find_objects(roi_array.astype(np.uint8))[0]
@@ -2310,6 +2378,7 @@ def analyze_biological_sample(
         "reference_profile_json": "reference_profile.json",
         "review_instances_tif": "manual_review_instances.tif",
         "report_png": "biological_report.png" if write_report else None,
+        "visual_record_html": "visual_record/index.html" if write_visual_record else None,
     }
     output.mkdir(parents=True, exist_ok=False)
     _write_csv(output / "objects.csv", rows)
@@ -2340,6 +2409,28 @@ def analyze_biological_sample(
             summary,
             output / "biological_report.png",
         )
+    if write_visual_record:
+        try:
+            import matplotlib  # noqa: F401
+        except ImportError:  # optional dependency
+            (output / "visual_record_skipped.txt").write_text(
+                "The visual record needs matplotlib: python -m pip install '.[biology]'\n"
+            )
+        else:
+            from .visual_record import write_visual_record as _write_visual_record
+
+            _write_visual_record(
+                raw,
+                instances,
+                spacing,
+                rows,
+                _json_clean(summary),
+                output / "visual_record",
+                sample_id=sample_id,
+                config=config,
+                roi=roi,
+                **(visual_record_options or {}),
+            )
     return _json_clean(summary)
 
 

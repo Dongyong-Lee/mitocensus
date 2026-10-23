@@ -9,7 +9,7 @@ module (`infer-from-priors`).
 ```bash
 conda env create -f environment.yml
 conda activate mitocensus
-python -m pip install .
+python -m pip install '.[biology]'        # add '.[refinement]' for the optional refinement module (PyTorch)
 ```
 
 The exact frozen environment uses Python 3.11 and is recorded in `environment.yml`. The package also supplies a
@@ -26,12 +26,12 @@ mitocensus analyze-biological \
   --sample-id specimen-01 \
   --group control \
   --output specimen-01_census \
-  --min-axial-sections 3 --split-screen-min-iou 0.4 --edge-correction-weights
+  --edge-correction-weights
 ```
 
-The instance mask can come from any segmenter. The last line switches on the section-support rule, the split-label
-screen and edge weights; without it only the border and connectivity checks decide which labels enter whole-object
-morphometry, and four object columns and five summary entries still record the options. This writes per-object
+The instance mask can come from any segmenter. The section-extent check (90 nm) and the split screen (as a review flag)
+are on by default; `--edge-correction-weights` adds edge weights. Open `specimen-01_census/visual_record/index.html`
+to see every check and measurement on its object, sections and voxels. This writes per-object
 measurements and checks, sample-level summaries, close mitochondrion pairs, a manual-review label map and a visual
 report for the 13 functions: amount; size and swelling; shape classes; line-filter score; matrix appearance; boundary
 features; population heterogeneity; spatial organization; rare morphologies; mitochondria-on-a-string and
