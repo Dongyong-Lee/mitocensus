@@ -1092,35 +1092,19 @@ def _measure_objects(
     return rows, slice_map
 
 
-def _split_label_screen(
+def _split_label_links(
     labels: np.ndarray,
-    rows: list[dict],
+    complete: set[int],
     source_to_dense: dict[int, int],
     *,
     min_iou: float,
     max_gap: int,
-    action: str = "exclude",
-) -> list[list[int]]:
-    """Flag labels whose end-section footprint continues in another label across unlabelled sections.
+) -> list[dict]:
+    """Pairs found by the split-label check: the first or last section of one label, the label that occupies most of
+    its footprint in the nearest labelled section within ``max_gap`` sections beyond it, and the footprint IoU."""
 
-    With ``action`` "exclude" (0.3.x) flagged labels are excluded from whole-object morphometry; with "flag" they stay
-    QC-passing and only carry the flag and its group.
-
-    Candidates are all border-free, single-component labels (whether or not they pass the section-count rule).
-    For each candidate, the footprint in its first and last section is compared with the label that occupies most
-    of the same footprint in the nearest labelled section within ``max_gap`` sections beyond it.  Pairs with
-    footprint IoU >= ``min_iou`` are joined into groups; every member is flagged, excluded from whole-object
-    morphometry and kept in abundance summaries.  Labels are never merged or re-measured."""
-
-    complete = {
-        int(row["object_id"])
-        for row in rows
-        if not row["border_touching"] and int(row["connected_component_count"]) == 1
-    }
-    if labels.ndim != 3 or len(complete) < 2:
-        return []
     dense_to_source = {dense: source for source, dense in source_to_dense.items()}
-    links: list[tuple[int, int]] = []
+    links: list[dict] = []
     for source_id in sorted(complete):
         mask = labels == source_to_dense[source_id]
         sections = np.flatnonzero(mask.reshape(mask.shape[0], -1).any(axis=1))
@@ -1140,8 +1124,45 @@ def _split_label_screen(
                 other_mask = labels[neighbour_z] == other_dense
                 iou = float((footprint & other_mask).sum() / max((footprint | other_mask).sum(), 1))
                 if other is not None and other != source_id and other in complete and iou >= min_iou:
-                    links.append((source_id, other))
+                    links.append({"object_id": int(source_id), "other_id": int(other), "section": end,
+                                  "other_section": int(neighbour_z), "iou": iou})
                 break
+    return links
+
+
+def _split_label_screen(
+    labels: np.ndarray,
+    rows: list[dict],
+    source_to_dense: dict[int, int],
+    *,
+    min_iou: float,
+    max_gap: int,
+    action: str = "exclude",
+    links_out: list[dict] | None = None,
+) -> list[list[int]]:
+    """Flag labels whose end-section footprint continues in another label across unlabelled sections.
+
+    With ``action`` "exclude" (0.3.x) flagged labels are excluded from whole-object morphometry; with "flag" they stay
+    QC-passing and only carry the flag and its group.
+
+    Candidates are all border-free, single-component labels (whether or not they pass the section-count rule).
+    For each candidate, the footprint in its first and last section is compared with the label that occupies most
+    of the same footprint in the nearest labelled section within ``max_gap`` sections beyond it.  Pairs with
+    footprint IoU >= ``min_iou`` are joined into groups; every member is flagged (and, with "exclude", excluded from
+    whole-object morphometry) and kept in abundance summaries.  Labels are never merged or re-measured.  The pairs
+    found are appended to ``links_out`` when it is given."""
+
+    complete = {
+        int(row["object_id"])
+        for row in rows
+        if not row["border_touching"] and int(row["connected_component_count"]) == 1
+    }
+    if labels.ndim != 3 or len(complete) < 2:
+        return []
+    found = _split_label_links(labels, complete, source_to_dense, min_iou=min_iou, max_gap=max_gap)
+    if links_out is not None:
+        links_out.extend(found)
+    links = [(link["object_id"], link["other_id"]) for link in found]
     groups: list[set[int]] = []
     for a, b in links:
         hit = [group for group in groups if a in group or b in group]
@@ -2241,6 +2262,7 @@ def analyze_biological_sample(
     if not rows:
         raise ValueError("no instance satisfies the configured minimum size")
     split_groups: list[list[int]] = []
+    split_links: list[dict] = []
     if config.split_screen_min_iou is not None:
         split_groups = _split_label_screen(
             labels,
@@ -2249,6 +2271,7 @@ def analyze_biological_sample(
             min_iou=config.split_screen_min_iou,
             max_gap=config.split_screen_max_gap_sections,
             action=config.split_screen_action,
+            links_out=split_links,
         )
     spatial = _spatial_features(rows, raw.ndim, roi_array, spacing)
     contacts = _contact_features(
@@ -2344,6 +2367,7 @@ def analyze_biological_sample(
         "split_screen_action": config.split_screen_action,
         "split_label_flagged_objects": sum(bool(row.get("split_label_candidate")) for row in rows),
         "split_label_groups": split_groups,
+        "split_label_links": [dict(link, iou=round(link["iou"], 4)) for link in split_links],
         "note": "objects excluded by a section check stay in abundance summaries and are excluded from whole-object "
                 "morphometry; split-screen labels are flagged for review (and excluded only with the 'exclude' "
                 "action); labels are never merged or re-measured",

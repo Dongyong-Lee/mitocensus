@@ -129,7 +129,8 @@ mitocensus analyze-biological ... \
   footprint IoU >= `T` (`split_label_candidate`, `split_label_group`). With `--split-screen-action flag` (default)
   flagged labels stay QC-passing and are marked for review; with `exclude` they are excluded from whole-object
   morphometry (class `not_evaluable_split_label_candidate`, the 0.3.x behaviour). Labels are never merged or
-  re-measured. The screen detects splits across sections, not side-by-side splits.
+  re-measured. The screen detects splits across sections, not side-by-side splits. The pairs found, with the sections
+  compared and their footprint IoU, are listed under `quality_control_v2.split_label_links`.
 - `--edge-correction-weights` writes the discrete Miles–Lantuéjoul weight `prod_i L_i / (L_i - b_i - 1)`
   (`edge_correction_weight`) for border-free objects and adds weighted and unweighted mean sizes to
   `sample_summary.json` (`edge_correction`). The weighted mean of one small region with few objects is itself a noisy

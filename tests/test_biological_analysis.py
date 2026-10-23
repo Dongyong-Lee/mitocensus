@@ -542,6 +542,8 @@ def test_default_extent_check_and_split_flag(tmp_path: Path) -> None:
     qc = summary["quality_control_v2"]
     assert qc["enabled"] is True and qc["split_screen_action"] == "flag"
     assert qc["split_label_groups"] == [[3, 4]] and qc["split_label_flagged_objects"] == 2
+    assert [(link["object_id"], link["other_id"], link["section"], link["other_section"], link["iou"])
+            for link in qc["split_label_links"]] == [(3, 4, 6, 8, 1.0), (4, 3, 8, 6, 1.0)]
     assert qc["objects_below_min_axial_extent"] == 1 and qc["min_axial_extent_nm"] == 90.0
 
 

@@ -60,6 +60,14 @@ def test_visual_record_command_rewrites_from_outputs(tmp_path: Path) -> None:
     args.function(args)
     record = json.loads((tmp_path / "c/visual_record/visual_record.json").read_text())
     assert record["consistency"]["max_abs_feature_difference"] == 0.0
+    # a summary without the recorded pairs (written before 0.4.0): the same pair is found again
+    summary_path = tmp_path / "c/sample_summary.json"
+    summary = json.loads(summary_path.read_text())
+    del summary["quality_control_v2"]["split_label_links"]
+    summary_path.write_text(json.dumps(summary))
+    args.function(args)
+    record = json.loads((tmp_path / "c/visual_record/visual_record.json").read_text())
+    assert set(record["objects_shown"]["split_flags"]) == {3, 4}
 
 
 def test_cli_defaults_and_none() -> None:

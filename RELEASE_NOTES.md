@@ -13,10 +13,13 @@ record. Measured values do not change; which labels enter whole-object morphomet
 - **Split screen as a review flag by default.** `--split-screen-min-iou 0.4` is on by default with
   `--split-screen-action flag`: flagged labels stay QC-passing and are marked for review (`split_label_candidate`,
   `split_label_group`, `manual_review_recommended`). `--split-screen-action exclude` restores the 0.3.x exclusion.
+  `sample_summary.json` lists the pairs the screen found (`quality_control_v2.split_label_links`: the label that ends,
+  its end section, the label under it, that section and the footprint IoU).
 - **Visual record.** `analyze-biological` writes `visual_record/index.html` (when matplotlib is installed and the
   report is on; `--no-visual-record` skips it): the check outcome, the labels excluded as too thin, QC-passing objects
-  by shape class across volume quantiles, possible splits, and object pages with the sections an object spans, its
-  surface, its skeleton after pruning and the voxels counted by the line-filter, matrix and weak-boundary measures.
+  by shape class across volume quantiles, one compared pair per group of possible splits with its IoU, and object
+  pages with the sections an object spans, its surface, its skeleton after pruning and the voxels counted by the
+  line-filter, matrix and weak-boundary measures.
   The displayed layers come from the measurement code; `visual_record.json` records that the features recomputed from
   them equal `objects.csv`. `mitocensus visual-record` rewrites the record from a finished analysis.
 - **PyTorch only for the refinement module.** Measurement, comparison and the visual record no longer import PyTorch;

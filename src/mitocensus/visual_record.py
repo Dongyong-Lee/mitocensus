@@ -31,6 +31,7 @@ from .biological_analysis import (
     _internal_features,
     _normalize_raw,
     _pruned_skeleton,
+    _split_label_links,
 )
 
 COLORS = {
@@ -213,9 +214,20 @@ def _render(ax, mesh, color, radius_um: float) -> None:
     ax.view_init(elev=20, azim=-58)
 
 
-def _outline(ax, mask2d: np.ndarray, color: str, lw: float = 0.9) -> None:
+def _outline(ax, mask2d: np.ndarray, color: str, lw: float = 0.9, ls: str = "solid") -> None:
     if mask2d.any():
-        ax.contour(mask2d.astype(float), levels=[0.5], colors=[color], linewidths=lw)
+        ax.contour(mask2d.astype(float), levels=[0.5], colors=[color], linewidths=lw, linestyles=ls)
+
+
+def _window2d(mask2d: np.ndarray, spacing: tuple[float, ...], margin_nm: float = 150.0) -> tuple[slice, slice]:
+    """Square in-plane window around the pixels of a 2-D mask with a margin."""
+    ys, xs = np.nonzero(mask2d)
+    sy, sx = spacing[-2], spacing[-1]
+    cy, cx = (ys.min() + ys.max() + 1) / 2, (xs.min() + xs.max() + 1) / 2
+    half = max((ys.max() - ys.min() + 1) * sy, (xs.max() - xs.min() + 1) * sx) / 2 + margin_nm
+    hy, hx = int(math.ceil(half / sy)), int(math.ceil(half / sx))
+    H, W = mask2d.shape
+    return slice(max(0, int(cy - hy)), min(H, int(cy + hy))), slice(max(0, int(cx - hx)), min(W, int(cx + hx)))
 
 
 def _image(ax, img: np.ndarray) -> None:
@@ -290,18 +302,20 @@ def _overview(rows: list[dict], sample: _Sample, path: Path) -> str:
     names = [("passing", "QC-passing"), ("thin", "Too thin across sections"), ("border", "Touches border / ROI"),
              ("disconnected", "Several pieces"), ("split", "Split label (excluded)")]
     counts = [(label, cats.count(key), COLORS[key]) for key, label in names if cats.count(key) or key == "passing"]
-    fig = plt.figure(figsize=(8.0, 2.5))
-    ax = fig.add_axes([0.08, 0.18, 0.22, 0.7])
+    SHORT = {"passing": "QC-passing", "thin": "Too thin", "border": "Border / ROI", "disconnected": "Several pieces",
+             "split": "Split (excluded)"}
+    fig = plt.figure(figsize=(7.4, 2.5))
+    ax = fig.add_axes([0.1, 0.18, 0.21, 0.7])
     y = np.arange(len(counts))[::-1]
     ax.barh(y, [c for _, c, _ in counts], color=[col for _, _, col in counts], height=0.6)
     for yy, (label, c, _) in zip(y, counts):
-        extra = f" ({flagged} flagged as possible splits)" if label == "QC-passing" and flagged else ""
+        extra = f" ({flagged} possible split{'s' if flagged != 1 else ''})" if label == "QC-passing" and flagged else ""
         ax.text(c, yy, f" {c}{extra}", va="center", fontsize=7.5)
     ax.set_yticks(y, [label for label, _, _ in counts])
     ax.set_xlabel("Labels")
     ax.set_title("Check outcome", loc="left")
-    ax2 = fig.add_axes([0.38, 0.18, 0.22, 0.7])
-    ax3 = fig.add_axes([0.66, 0.18, 0.18, 0.7])
+    ax2 = fig.add_axes([0.4, 0.18, 0.22, 0.7])
+    ax3 = fig.add_axes([0.7, 0.18, 0.17, 0.7])
     if sample.ndim == 3:
         sec = np.array([_number(r.get("axial_sections"), np.nan) for r in rows])
         thin = np.array([c == "thin" for c in cats])
@@ -320,7 +334,7 @@ def _overview(rows: list[dict], sample: _Sample, path: Path) -> str:
         for key in ("border", "disconnected", "split", "thin", "passing"):
             sel = np.array([c == key for c in cats]) & np.isfinite(vol) & np.isfinite(sec)
             if sel.any():
-                ax3.scatter(sec[sel], vol[sel], s=5, color=COLORS[key], lw=0, label=dict(names)[key], alpha=0.85)
+                ax3.scatter(sec[sel], vol[sel], s=5, color=COLORS[key], lw=0, label=SHORT[key], alpha=0.85)
         ax3.set_xscale("log"), ax3.set_yscale("log")
         ax3.legend(frameon=False, loc="upper left", bbox_to_anchor=(1.0, 1.0), markerscale=1.6, handletextpad=0.2,
                    borderaxespad=0.1)
@@ -342,6 +356,7 @@ def _thin_gallery(rows: list[dict], sample: _Sample, path: Path, k: int) -> tupl
     cols = min(n, 6)
     nrows = int(math.ceil(n / cols))
     fig, axes = plt.subplots(nrows, cols, figsize=(1.3 * cols, 1.5 * nrows), squeeze=False)
+    fig.subplots_adjust(left=0.01, right=0.99, wspace=0.12)
     for ax in axes.ravel():
         ax.set_axis_off()
     for ax, r in zip(axes.ravel(), thin):
@@ -350,6 +365,7 @@ def _thin_gallery(rows: list[dict], sample: _Sample, path: Path, k: int) -> tupl
         ys, xs = sample.window(oid)
         dense, _ = sample.item(oid)
         _image(ax, sample.normalized[z][ys, xs])
+        ax.set_anchor("N")
         _outline(ax, sample.labels[z][ys, xs] == dense, COLORS["thin"])
         _scalebar(ax, sample.spacing[-1])
         ns = int(_number(r.get("axial_sections"), 0))
@@ -432,31 +448,62 @@ def _class_galleries(rows: list[dict], sample: _Sample, path: Path, k: int) -> t
 
 
 def _split_figure(rows: list[dict], summary: dict, sample: _Sample, path: Path, k: int) -> tuple[str | None, list[int]]:
-    groups = (summary.get("quality_control_v2") or {}).get("split_label_groups") or []
+    """One pair per group, as the check compared it: the end section of one label (blue) and the label under its
+    footprint in the nearest labelled section (vermillion), with the footprint repeated as a dashed line and the IoU.
+    Pairs with a QC-passing label and a high IoU are shown first."""
+    qc = summary.get("quality_control_v2") or {}
+    groups = qc.get("split_label_groups") or []
     if not groups or sample.ndim != 3:
         return None, []
-    groups = groups[:k]
+    min_iou = _number(qc.get("split_screen_min_iou"), _number(sample.config.split_screen_min_iou, 0.4))
+    max_gap = int(_number(qc.get("split_screen_max_gap_sections"), sample.config.split_screen_max_gap_sections))
+    links = qc.get("split_label_links")
+    if links is None:  # summaries written before 0.4.0: the same rule on the same labels
+        complete = {int(_number(r["object_id"])) for r in rows
+                    if not _truthy(r.get("border_touching")) and int(_number(r.get("connected_component_count"), 0)) == 1}
+        links = _split_label_links(sample.labels, complete, sample.source_to_dense, min_iou=min_iou, max_gap=max_gap)
+    passing = {int(_number(r["object_id"])) for r in rows if _category(r) == "passing"}
+    chosen = []
+    for group in groups[:k]:
+        members = {int(v) for v in group}
+        pairs = [link for link in links if int(link["object_id"]) in members and int(link["other_id"]) in members]
+        if pairs:
+            chosen.append(min(pairs, key=lambda link: (-(int(link["object_id"]) in passing)
+                                                       - (int(link["other_id"]) in passing), -float(link["iou"]))))
+    if not chosen:
+        return None, []
     plt = _plt()
-    fig, axes = plt.subplots(len(groups), 2, figsize=(3.2, 1.65 * len(groups)), squeeze=False)
+    per_row = min(len(chosen), 3)
+    nrows = int(math.ceil(len(chosen) / per_row))
+    width, height = 2.6 * per_row, 0.62 + 1.55 * nrows
+    fig = plt.figure(figsize=(width, height))
+    ratios = sum(([1, 1, 0.22] for _ in range(per_row)), [])[:-1]
+    grid = fig.add_gridspec(nrows, len(ratios), width_ratios=ratios, left=0.01, right=0.99, top=1 - 0.62 / height,
+                            bottom=0.02, wspace=0.06, hspace=0.35)
     shown = []
-    for gi, group in enumerate(groups):
-        a, b = int(group[0]), int(group[1])
+    for gi, link in enumerate(chosen):
+        a, b = int(link["object_id"]), int(link["other_id"])
+        za, zb = int(link["section"]), int(link["other_section"])
         shown += [a, b]
-        sa, sb = sample.sections(a), sample.sections(b)
-        if not sa or not sb:
-            continue
-        za, zb = (max(sa), min(sb)) if max(sa) < min(sb) else (min(sa), max(sb))
         da, _ = sample.item(a)
         db, _ = sample.item(b)
-        ys, xs = sample.window(a, margin_nm=200.0)
-        for ax, z, title in ((axes[gi, 0], za, f"section {za}"), (axes[gi, 1], zb, f"section {zb}")):
-            _image(ax, sample.normalized[z][ys, xs])
-            _outline(ax, sample.labels[z][ys, xs] == da, COLORS["passing"])
-            _outline(ax, sample.labels[z][ys, xs] == db, COLORS["split"])
-            ax.set_title(title, fontsize=7.5)
-        axes[gi, 0].set_ylabel(f"IDs {a} → {b}", fontsize=7.5)
-    fig.suptitle("Possible splits: one label ends (blue) and another continues (vermillion) within the gap allowed",
-                 fontsize=8.5, x=0.01, ha="left")
+        fa, fb = sample.labels[za] == da, sample.labels[zb] == db
+        ys, xs = _window2d(fa | fb, sample.spacing)
+        r, c = divmod(gi, per_row)
+        left, right = fig.add_subplot(grid[r, 3 * c]), fig.add_subplot(grid[r, 3 * c + 1])
+        _image(left, sample.normalized[za][ys, xs])
+        _outline(left, fa[ys, xs], COLORS["passing"])
+        _scalebar(left, sample.spacing[-1])
+        left.set_title(f"ID {a}, section {za}\n(label ends)", fontsize=7.5)
+        _image(right, sample.normalized[zb][ys, xs])
+        _outline(right, fa[ys, xs], COLORS["passing"], lw=1.0, ls="dashed")
+        _outline(right, fb[ys, xs], COLORS["split"])
+        right.set_title(f"ID {b}, section {zb}\nIoU {float(link['iou']):.2f}", fontsize=7.5)
+        for ax in (left, right):
+            ax.set_anchor("N")
+    fig.suptitle(f"Possible splits: where one label ends (blue), another label (vermillion) lies under it up to "
+                 f"{max_gap} sections away\n(dashed, the outline of the label that ends; one pair per group; bar 200 nm)",
+                 fontsize=8.5, x=0.01, ha="left", va="top", y=1 - 0.04 / height)
     return _save(fig, path), shown
 
 
@@ -495,15 +542,16 @@ def _summary_figure(rows: list[dict], summary: dict, sample: _Sample, path: Path
         from matplotlib.ticker import LogLocator, NullFormatter
         ax2.xaxis.set_major_locator(LogLocator(base=10))
         ax2.xaxis.set_minor_formatter(NullFormatter())
+        lo, hi = math.floor(math.log10(bins[0])), math.ceil(math.log10(bins[-1]))
+        ax2.set_xlim(10.0 ** lo, 10.0 ** max(hi, lo + 1))
         ax2.axvline(np.median(sizes), color=COLORS["ink"], lw=0.7)
         edge = summary.get("edge_correction") or {}
         if edge.get("enabled") and math.isfinite(_number(edge.get("weighted_mean_physical_size"))):
             ax2.axvline(_number(edge.get("weighted_mean_physical_size")), color=COLORS["split"], lw=0.7,
                         ls=(0, (2, 1.5)))
-    unit = "µm³" if sample.ndim == 3 else "µm²"
-    ax2.set_xlabel(f"Size of QC-passing objects ({unit})")
+    ax2.set_xlabel("Volume (µm³)" if sample.ndim == 3 else "Area (µm²)")
     ax2.set_ylabel("Objects")
-    ax2.set_title(f"Size (n = {sizes.size})", loc="left")
+    ax2.set_title(f"Size of QC-passing objects (n = {sizes.size})", loc="left")
     ax3 = fig.add_axes([0.57, 0.2, 0.17, 0.66])
     nn = np.array([_number(r.get("nearest_neighbor_um")) for r in passing], dtype=float)
     nn = nn[np.isfinite(nn)]
@@ -512,7 +560,7 @@ def _summary_figure(rows: list[dict], summary: dict, sample: _Sample, path: Path
         csr = _number((fn.get("spatial_organization") or {}).get("csr_expected_nearest_neighbor_um"))
         if math.isfinite(csr):
             ax3.axvline(csr, color=COLORS["ink"], lw=0.7, ls=(0, (2, 1.5)))
-    ax3.set_xlabel("Nearest-neighbour distance (µm)")
+    ax3.set_xlabel("Nearest neighbour (µm)")
     ax3.set_ylabel("Objects")
     ax3.set_title("Spacing", loc="left")
     ax4 = fig.add_axes([0.85, 0.2, 0.13, 0.66])
@@ -525,6 +573,9 @@ def _summary_figure(rows: list[dict], summary: dict, sample: _Sample, path: Path
     ax4.set_yticks(y, [label for label, _ in counts], fontsize=7)
     ax4.set_xlabel("QC-passing objects")
     ax4.set_title("Review flags", loc="left")
+    from matplotlib.ticker import MaxNLocator
+    for axis in (ax2.yaxis, ax3.yaxis, ax4.xaxis):
+        axis.set_major_locator(MaxNLocator(integer=True))
     return _save(fig, path)
 
 
@@ -554,6 +605,7 @@ def _object_page(row: dict, sample: _Sample, path: Path) -> dict:
         ax.computed_zorder = False
         m = sample.mesh(oid)
         _render(ax, m, color, (np.ptp(m[0], axis=0).max() / 2 * 1.05) if m is not None else 1.0)
+        ax.set_title("Surface", fontsize=7.5)
         ax2 = fig.add_axes([0.22, 0.05, 0.17, 0.42])
         proj = isotropic.max(axis=0)
         ax2.imshow(proj, cmap="Greys", vmin=0, vmax=2.5, interpolation="nearest")
@@ -561,7 +613,7 @@ def _object_page(row: dict, sample: _Sample, path: Path) -> dict:
         if len(sk):
             ax2.scatter(sk[:, 2], sk[:, 1], s=1.2, color=COLORS["ink"], lw=0)
         ax2.set_axis_off()
-        ax2.set_title("Skeleton (projected across sections)", fontsize=7.5)
+        ax2.set_title("Skeleton, projected", fontsize=7.5)
         zbest = sample.best_section(oid)
         zloc = zbest - expanded[0].start
         layer2d = {k: v[zloc] for k, v in layers.items()}
@@ -590,7 +642,7 @@ def _object_page(row: dict, sample: _Sample, path: Path) -> dict:
               ("Sections", f"{int(_number(row.get('axial_sections'), 0))}" if sample.ndim == 3 else "—"),
               ("Major / minor axis", f"{_number(row.get('major_axis_um')):.2f} / {_number(row.get('minor_axis_um')):.2f} µm"),
               ("Elongation", f"{_number(row.get('elongation')):.2f}"),
-              ("Shape class", str(row.get("shape_class"))),
+              ("Shape class", CLASS_NAMES.get(str(row.get("shape_class")), "—")),
               ("Line-filter fraction", f"{_number(row.get('line_filter_fraction')):.3f}"),
               ("Matrix density", f"{_number(row.get('matrix_electron_density')):.3f}"),
               ("Weak boundary", f"{_number(row.get('weak_boundary_fraction')):.3f}"),
@@ -663,13 +715,14 @@ def write_visual_record(raw: np.ndarray, instances: np.ndarray, spacing_nm: Sequ
                 ("Minimum extent across sections", f"{config.min_axial_extent_nm:g} nm" if config.min_axial_extent_nm
                  else "off"),
                 ("Minimum sections", str(config.min_axial_sections) if config.min_axial_sections else "off"),
-                ("Split screen", f"IoU ≥ {config.split_screen_min_iou:g}, gap ≤ {config.split_screen_max_gap_sections}"
+                ("Split-label check", f"IoU ≥ {config.split_screen_min_iou:g}, gap ≤ {config.split_screen_max_gap_sections}"
                  f" sections, action: {config.split_screen_action}" if config.split_screen_min_iou else "off"),
                 ("Minimum label size", f"{config.min_voxels} voxels")]
     blocks = [f"<h1>MitoCensus visual record — {html.escape(sample_id)}</h1>",
               f"<p class=note>MitoCensus {__version__}. Every image is drawn from the labels and image the analysis "
               "measured; numbers are those of <code>objects.csv</code>. Surfaces are marching-cubes renderings of the "
-              "mask (16-nm smoothing) and carry no new values.</p>",
+              "mask (16-nm smoothing) and carry no new values. Sections are numbered from 0, as in the image "
+              "array.</p>",
               "<table>" + "".join(f"<tr><th>{html.escape(k)}</th><td>{v}</td></tr>" for k, v in counts) + "</table>",
               "<h2>Settings</h2><table>" + "".join(f"<tr><th>{html.escape(k)}</th><td>{html.escape(v)}</td></tr>"
                                                     for k, v in settings) + "</table>",
@@ -677,10 +730,10 @@ def write_visual_record(raw: np.ndarray, instances: np.ndarray, spacing_nm: Sequ
               "<p class=note>Labels that span too few sections cannot support whole-object shape measures: their "
               "extent across sections reflects the sampling, not the object. They stay in abundance summaries.</p>"]
     blocks += ["<h2>Amount, size, spacing and review flags</h2>", f"<img src=\"{files['summary']}\" alt=\"sample summary\">",
-               "<p class=note>Dashed lines: the whole region (amount) and the distance expected for randomly placed "
-               "objects (spacing); solid line: median size. Size, spacing and flags are computed from QC-passing "
-               "objects only. A single small region holds few whole objects; pool regions before interpreting "
-               "sizes.</p>"]
+               "<p class=note>Dotted lines: the whole region (amount) and the distance expected for randomly placed "
+               "objects (spacing); solid line: median size; dashed vermillion line: edge-weighted mean size (when "
+               "edge weights are on). Size, spacing and flags are computed from QC-passing objects only. A single "
+               "small region holds few whole objects; pool regions before interpreting sizes.</p>"]
     if thin_png:
         files["thin_labels"] = thin_png
         blocks += ["<h2>2. Labels excluded as too thin</h2>", f"<img src=\"{thin_png}\" alt=\"thin labels\">",
@@ -690,7 +743,7 @@ def write_visual_record(raw: np.ndarray, instances: np.ndarray, spacing_nm: Sequ
         blocks += ["<h2>3. QC-passing objects by shape class</h2>", f"<img src=\"{class_png}\" alt=\"shape classes\">",
                    "<p class=note>Classes are relative to the reference profile "
                    f"({html.escape(str((summary.get('calibration') or {}).get('source', 'sample')))}) and describe "
-                   "static geometry.</p>"]
+                   "static geometry. Branched: elongated with a branch point or a long skeleton.</p>"]
     if split_png:
         files["split_flags"] = split_png
         blocks += ["<h2>4. Possible splits flagged for review</h2>", f"<img src=\"{split_png}\" alt=\"split flags\">",
