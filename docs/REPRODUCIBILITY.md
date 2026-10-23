@@ -1,4 +1,4 @@
-# Reproducing MitoCensus 0.3.1
+# Reproducing MitoCensus 0.4.0
 
 ## Fast path: verify the released executable examples
 
@@ -11,7 +11,8 @@ python scripts/verify_minimal_example.py
 python scripts/verify_biological_analysis.py
 ```
 
-Expected outcomes are 37 passing tests with 134 passing parameterized subtests (16 core and 21 object-analysis tests),
+Expected outcomes are 44 passing tests with 134 passing parameterized subtests (16 core tests and 28 object-analysis
+and visual-record tests),
 `MINIMAL_EXAMPLE_PASS` and `BIOLOGICAL_ANALYSIS_PASS`. All tests use synthetic data and run without non-distributed
 records.
 
@@ -27,6 +28,11 @@ demonstration volumes (default checks; QC v2 with edge weights), the minimal exa
 242 held-out and replication crop records; 10 development volume–source pairs, whose label maps are empty, are
 declined. The outputs of the first version of the split-label screen, kept to document the corrected screen, come from
 a development variant of the screen and are not part of this comparison.
+
+Version 0.4.0 changes the defaults (section-extent check on, split screen as a review flag) but not the measurements.
+With the settings of version 0.3.1 (`--min-axial-extent-nm none --split-screen-min-iou none`, or `--min-axial-extent-nm
+none --min-axial-sections 3 --split-screen-action exclude` for the 0.3.1 "all checks"), it writes the same object tables
+as version 0.3.1 for every held-out and development record of the manuscript.
 
 ## Library versions
 
@@ -64,8 +70,8 @@ a Docker engine, so the release does not claim an executed clean container build
 and archive the log before journal submission:
 
 ```bash
-docker build -t mitocensus:0.3.1 .
-docker run --rm mitocensus:0.3.1 --help
+docker build -t mitocensus:0.4.0 .
+docker run --rm mitocensus:0.4.0 --help
 ```
 
 ## Interpretation boundary

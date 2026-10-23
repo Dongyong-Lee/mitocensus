@@ -76,12 +76,18 @@ def main() -> None:
             "reference_profile.json",
             "manual_review_instances.tif",
             "biological_report.png",
+            "visual_record",
         }
         actual_single = {path.name for path in (temporary / "minimal").iterdir()}
         if actual_single != expected_single:
             raise SystemExit(
                 f"single-sample artifact mismatch: {sorted(actual_single ^ expected_single)}"
             )
+
+        record = json.loads((temporary / "minimal/visual_record/visual_record.json").read_text())
+        consistency = record["consistency"]
+        if consistency["max_abs_feature_difference"] != 0.0 or not consistency["all_skeleton_voxel_counts_match"]:
+            raise SystemExit("visual record does not match the object table")
 
         manifest_rows = []
         for sample_id, group, scale in (
@@ -136,6 +142,7 @@ def main() -> None:
             "single_sample_objects": single["functions"]["mitochondrial_amount"][
                 "object_count"
             ],
+            "visual_record_pages_checked": consistency["objects_checked"],
             "cohort_samples": response["n_samples"],
             "cohort_endpoint_comparisons": response[
                 "function_8_disease_or_treatment_response"

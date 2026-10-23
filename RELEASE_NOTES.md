@@ -1,6 +1,6 @@
 # MitoCensus release notes
 
-## 0.4.0 (unreleased)
+## 0.4.0 (2026-10-24)
 
 The section check is on by default, the split screen flags rather than excludes, and every analysis writes a visual
 record. Measured values do not change; which labels enter whole-object morphometry by default does.
@@ -27,6 +27,7 @@ record. Measured values do not change; which labels enter whole-object morphomet
 - With `--min-axial-extent-nm none --split-screen-min-iou none` (0.3.1 defaults) or `--min-axial-extent-nm none
   --min-axial-sections 3 --split-screen-action exclude` (0.3.1 "all checks"), 0.4.0 writes the same `objects.csv` and
   `contacts.csv` as 0.3.1. Seven tests were added (44 in total).
+- `scripts/verify_biological_analysis.py` expects the visual record and checks that it matches the object table.
 
 ## 0.3.1 (2026-10-22)
 

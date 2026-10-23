@@ -11,8 +11,8 @@
   cited by the frozen evaluation records
   (`c3dd763f878de379ad3ec612f65d984d18ce55e698cbab909f420a732e851ae5`).
 - Original-code license: MIT.
-- Release state: version 0.3.1, public at https://github.com/Dongyong-Lee/mitocensus;
-  a persistent archive identifier (DOI) is still required.
+- Release state: version 0.4.0, public at https://github.com/Dongyong-Lee/mitocensus and archived on Zenodo
+  (all versions: https://doi.org/10.5281/zenodo.23390544).
 
 ## Intended use
 
